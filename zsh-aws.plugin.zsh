@@ -1,3 +1,14 @@
+#!/usr/bin/env zsh
+# Standarized $0 handling, following:
+# https://github.com/zdharma/Zsh-100-Commits-Club/blob/master/Zsh-Plugin-Standard.adoc
+0="${ZERO:-${${0:#$ZSH_ARGZERO}:-${(%):-%N}}}"
+0="${${(M)0:#/*}:-$PWD/$0}"
+
+if [[ $PMSPEC != *b* ]] {
+  PATH=$PATH:"${0:h}/bin"
+}
+
+
 function alp() {
   [[ -r "${AWS_CONFIG_FILE:-$HOME/.aws/config}" ]] || return 1
   grep --color=never -Eo '\[.*\]' "${AWS_CONFIG_FILE:-$HOME/.aws/config}" | sed -E 's/^[[:space:]]*\[(profile)?[[:space:]]*([-_[:alnum:]\.@]+)\][[:space:]]*$/\2/g'
