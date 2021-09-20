@@ -1,4 +1,3 @@
-#!/bin/bash
 # Source this file to activate auto completion for zsh using the bash
 # compatibility helper.  Make sure to run `compinit` before, which should be
 # given usually.
