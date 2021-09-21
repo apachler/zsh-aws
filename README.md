@@ -1,6 +1,6 @@
-# ZSH AWS Plugin
+# ZSH AWS plugin
 
-This plugin is based on the original [aws plugin](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/aws) of Oh My ZSH!
+This plugin is based on the original [aws plugin](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/aws) of Oh-My-ZSH!
 
 It provides completion support for [awscli](https://docs.aws.amazon.com/cli/latest/reference/index.html)
 and a few utilities to manage AWS profiles and display them in the prompt.
