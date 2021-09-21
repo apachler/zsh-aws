@@ -8,6 +8,15 @@ and a few utilities to manage AWS profiles and display them in the prompt.
 
 ## Installation
 
+First you have to enable Bash completion before loading the plugin in `~/.zshrc`
+
+```zsh
+autoload -Uz compinit && compinit
+autoload -Uz bashcompinit && bashcompinit
+```
+
+Now the plugin can be loaded
+ 
 ### zplug
 
 ```zsh
