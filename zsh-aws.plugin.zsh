@@ -27,7 +27,7 @@ function asp() {
   fi
 
   local -a available_profiles
-  available_profiles=($(aws_profiles))
+  available_profiles=($(alp))
   if [[ -z "${available_profiles[(r)$1]}" ]]; then
     echo "${fg[red]}Profile '$1' not found in '${AWS_CONFIG_FILE:-$HOME/.aws/config}'" >&2
     echo "Available profiles: ${(j:, :)available_profiles:-no profiles found}${reset_color}" >&2
@@ -49,7 +49,7 @@ function acp() {
   fi
 
   local -a available_profiles
-  available_profiles=($(aws_profiles))
+  available_profiles=($(alp))
   if [[ -z "${available_profiles[(r)$1]}" ]]; then
     echo "${fg[red]}Profile '$1' not found in '${AWS_CONFIG_FILE:-$HOME/.aws/config}'" >&2
     echo "Available profiles: ${(j:, :)available_profiles:-no profiles found}${reset_color}" >&2
@@ -157,7 +157,6 @@ function acak() {
 function _aws_profiles() {
   reply=($(alp))
 }
-
 compctl -K _aws_profiles asp acp acak
 
 # AWS prompt
@@ -214,3 +213,4 @@ else
   [[ -r $_aws_zsh_completer_path ]] && source $_aws_zsh_completer_path
   unset _aws_zsh_completer_path _brew_prefix
 fi
+
