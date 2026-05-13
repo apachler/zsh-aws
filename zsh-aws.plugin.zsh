@@ -14,6 +14,40 @@ function alp() {
   grep --color=never -Eo '\[.*\]' "${AWS_CONFIG_FILE:-$HOME/.aws/config}" | sed -E 's/^[[:space:]]*\[(profile)?[[:space:]]*([-_[:alnum:]\.@]+)\][[:space:]]*$/\2/g'
 }
 
+# Load all keys for $1 from $AWS_CONFIG_FILE and the credentials file into the
+# associative array _aws_profile_data, replacing 9+ slow `aws configure get`
+# subprocesses with two flat reads. Honors `profile NAME` (config) vs `NAME`
+# (credentials) section conventions.
+function _aws_load_profile() {
+  local profile="$1"
+  local file line key value section in_section
+
+  typeset -gA _aws_profile_data
+  _aws_profile_data=()
+
+  for file in "${AWS_CONFIG_FILE:-$HOME/.aws/config}" \
+              "${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"; do
+    [[ -r "$file" ]] || continue
+    in_section=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"
+      if [[ $line =~ '^[[:space:]]*\[[[:space:]]*(profile[[:space:]]+)?([-_[:alnum:].@]+)[[:space:]]*\][[:space:]]*$' ]]; then
+        section="$match[2]"
+        [[ "$section" == "$profile" ]] && in_section=1 || in_section=0
+        continue
+      fi
+      (( in_section )) || continue
+      # key = value; skip subsection introducers ("s3 =" with indented kids)
+      if [[ $line =~ '^[[:space:]]*([^=[:space:]]+)[[:space:]]*=[[:space:]]*(.*[^[:space:]]|)[[:space:]]*$' ]]; then
+        key="$match[1]"
+        value="$match[2]"
+        [[ -z "$value" ]] && continue
+        _aws_profile_data[$key]="$value"
+      fi
+    done < "$file"
+  done
+}
+
 function agp() {
   echo $AWS_PROFILE
 }
@@ -57,15 +91,16 @@ function acp() {
   fi
 
   local profile="$1"
+  _aws_load_profile "$profile"
 
   # Get fallback credentials for if the aws command fails or no command is run
-  local aws_access_key_id="$(aws configure get aws_access_key_id --profile $profile)"
-  local aws_secret_access_key="$(aws configure get aws_secret_access_key --profile $profile)"
-  local aws_session_token="$(aws configure get aws_session_token --profile $profile)"
+  local aws_access_key_id="${_aws_profile_data[aws_access_key_id]}"
+  local aws_secret_access_key="${_aws_profile_data[aws_secret_access_key]}"
+  local aws_session_token="${_aws_profile_data[aws_session_token]}"
 
   # First, if the profile has MFA configured, lets get the token and session duration
-  local mfa_serial="$(aws configure get mfa_serial --profile $profile)"
-  local sess_duration="$(aws configure get duration_seconds --profile $profile)"
+  local mfa_serial="${_aws_profile_data[mfa_serial]}"
+  local sess_duration="${_aws_profile_data[duration_seconds]}"
 
   if [[ -n "$mfa_serial" ]]; then
     local -a mfa_opt
@@ -90,8 +125,8 @@ function acp() {
   fi
 
   # Now see whether we need to just MFA for the current role, or assume a different one
-  local role_arn="$(aws configure get role_arn --profile $profile)"
-  local sess_name="$(aws configure get role_session_name --profile $profile)"
+  local role_arn="${_aws_profile_data[role_arn]}"
+  local sess_name="${_aws_profile_data[role_session_name]}"
 
   local -a aws_command
   if [[ -n "$role_arn" ]]; then
@@ -99,7 +134,7 @@ function acp() {
     aws_command=(aws sts assume-role --role-arn "$role_arn" "${mfa_opt[@]}")
 
     # Check whether external_id is configured to use while assuming the role
-    local external_id="$(aws configure get external_id --profile $profile)"
+    local external_id="${_aws_profile_data[external_id]}"
     if [[ -n "$external_id" ]]; then
       aws_command+=(--external-id "$external_id")
     fi
@@ -107,7 +142,7 @@ function acp() {
     # Get source profile to use to assume role; fall back to the role profile
     # itself so the AWS CLI can resolve credentials from credential_process,
     # instance metadata, etc.
-    local source_profile="$(aws configure get source_profile --profile $profile)"
+    local source_profile="${_aws_profile_data[source_profile]}"
     local credentials_profile="${source_profile:-$profile}"
     if [[ -z "$sess_name" ]]; then
       sess_name="$credentials_profile"
