@@ -160,6 +160,27 @@ function agr() {
   echo "${AWS_REGION:-$AWS_DEFAULT_REGION}"
 }
 
+# Print the resolved AWS identity (account, user/role ARN) for the current
+# environment. Thin wrapper over `aws sts get-caller-identity` with a stable,
+# one-line output suitable for shell scripting.
+function awhoami() {
+  local out
+  if ! out="$(aws sts get-caller-identity --output text --query '[Account,Arn,UserId]' 2>&1)"; then
+    echo "${fg[red]}awhoami: $out${reset_color}" >&2
+    return 1
+  fi
+  local -a parts
+  parts=(${(ps:\t:)out})
+  local account="${parts[1]}" arn="${parts[2]}" user_id="${parts[3]}"
+  local profile_segment=""
+  [[ -n "$AWS_PROFILE" ]] && profile_segment=" (profile: $AWS_PROFILE)"
+  local region="${AWS_REGION:-$AWS_DEFAULT_REGION}"
+  [[ -n "$region" ]] && profile_segment+=" [region: $region]"
+  echo "$arn"
+  echo "  account: $account"
+  echo "  user-id: $user_id$profile_segment"
+}
+
 # AWS profile selection
 function asp() {
   if [[ -z "$1" ]]; then
