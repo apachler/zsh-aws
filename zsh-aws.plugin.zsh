@@ -446,18 +446,56 @@ function acp() {
 
 function acak() {
   if [[ -z "$1" ]]; then
-    echo "usage: $0 <profile>"
+    echo "usage: acak <profile>"
     return 1
   fi
 
-  echo "Insert the credentials when asked."
-  asp "$1" || return 1
-  AWS_PAGER="" aws iam create-access-key
-  AWS_PAGER="" aws configure --profile "$1"
+  local profile="$1"
+  asp "$profile" || return 1
 
-  echo "You can now safely delete the old access key running \`aws iam delete-access-key --access-key-id ID\`"
-  echo "Your current keys are:"
-  AWS_PAGER="" aws iam list-access-keys
+  # Remember the old key so we can offer to delete it after the rotation.
+  local old_key
+  old_key="$(AWS_PAGER='' aws configure get aws_access_key_id --profile "$profile" 2>/dev/null)"
+
+  echo "Creating a new access key for profile $profile..."
+  local new_creds
+  if ! new_creds="$(AWS_PAGER='' aws iam create-access-key --output text --query 'AccessKey.[AccessKeyId,SecretAccessKey]' 2>&1)"; then
+    echo "${fg[red]}create-access-key failed: $new_creds${reset_color}" >&2
+    return 1
+  fi
+
+  local -a parts
+  parts=(${(ps:\t:)new_creds})
+  local new_key="$parts[1]" new_secret="$parts[2]"
+  if [[ -z "$new_key" || -z "$new_secret" ]]; then
+    echo "${fg[red]}create-access-key returned unexpected output: $new_creds${reset_color}" >&2
+    return 1
+  fi
+
+  AWS_PAGER='' aws configure set aws_access_key_id     "$new_key"    --profile "$profile"
+  AWS_PAGER='' aws configure set aws_secret_access_key "$new_secret" --profile "$profile"
+  echo "New access key $new_key written to profile $profile."
+
+  if [[ -n "$old_key" && "$old_key" != "$new_key" ]]; then
+    echo -n "Delete the old access key $old_key? [y/N] "
+    local reply
+    read -r reply
+    if [[ "$reply" == [yY]* ]]; then
+      if AWS_PAGER='' aws iam delete-access-key --access-key-id "$old_key"; then
+        echo "Deleted $old_key."
+      else
+        echo "${fg[red]}Failed to delete $old_key; remove it manually with:${reset_color}" >&2
+        echo "  aws iam delete-access-key --access-key-id $old_key" >&2
+        return 1
+      fi
+    else
+      echo "Left $old_key in place. Delete later with:"
+      echo "  aws iam delete-access-key --access-key-id $old_key"
+    fi
+  fi
+
+  echo "Current access keys for this identity:"
+  AWS_PAGER='' aws iam list-access-keys
 }
 
 # Modern completion: _describe shows profile names with their region/role as a
