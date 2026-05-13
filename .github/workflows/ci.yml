@@ -30,3 +30,42 @@ jobs:
 
       - name: Run test suite
         run: zsh test/run-tests.zsh
+
+  # Run against pinned zsh versions to catch version-specific regressions.
+  # Each container ships a known zsh from its distro packages — no need to
+  # build from source. Add a row when a real bug surfaces on an older version.
+  zsh-versions:
+    name: zsh on ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - container: ubuntu:20.04
+            label: zsh 5.8 (ubuntu 20.04)
+          - container: ubuntu:22.04
+            label: zsh 5.8.1 (ubuntu 22.04)
+          - container: ubuntu:24.04
+            label: zsh 5.9 (ubuntu 24.04)
+          - container: debian:bookworm
+            label: zsh 5.9 (debian 12)
+    steps:
+      - name: Install zsh, git, certs
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            zsh git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: Report zsh version
+        run: zsh --version
+
+      - name: zsh -n (plugin + completer)
+        run: |
+          zsh -n zsh-aws.plugin.zsh
+          zsh -n bin/aws_zsh_completer.sh
+
+      - name: Run test suite
+        run: zsh test/run-tests.zsh
