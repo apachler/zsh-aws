@@ -290,9 +290,21 @@ function acp() {
   if [[ -n "$mfa_serial" ]]; then
     local -a mfa_opt
     local mfa_token
-    echo -n "Please enter your MFA token for $mfa_serial: "
-    read -rs mfa_token
-    echo
+    # If the profile defines `mfa_command`, run it to obtain the token instead
+    # of prompting interactively. Useful for `pass otp`, `ykman oath code`,
+    # `op item get`, etc. The command must print the 6-digit token on stdout.
+    local mfa_command="${_aws_profile_data[mfa_command]}"
+    if [[ -n "$mfa_command" ]]; then
+      mfa_token="$(eval "$mfa_command" 2>/dev/null | tr -d '[:space:]')"
+      if [[ -z "$mfa_token" ]]; then
+        echo "${fg[red]}mfa_command produced no output: $mfa_command${reset_color}" >&2
+        return 1
+      fi
+    else
+      echo -n "Please enter your MFA token for $mfa_serial: "
+      read -rs mfa_token
+      echo
+    fi
     if [[ ! "$mfa_token" =~ ^[0-9]{6}$ ]]; then
       echo "${fg[red]}Invalid MFA token: expected 6 digits${reset_color}" >&2
       return 1
