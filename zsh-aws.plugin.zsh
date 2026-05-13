@@ -160,6 +160,44 @@ function agr() {
   echo "${AWS_REGION:-$AWS_DEFAULT_REGION}"
 }
 
+# Walk the source_profile chain starting at $1 and print each hop with its
+# role_arn / credential_source. Helpful for debugging multi-account setups
+# where assume-role calls reach through several profiles.
+function achain() {
+  local profile="$1"
+  if [[ -z "$profile" ]]; then
+    echo "usage: achain <profile>" >&2
+    return 2
+  fi
+  local depth=0 max_depth=10 indent
+  local -A visited
+  while [[ -n "$profile" && depth -lt max_depth ]]; do
+    if [[ -n "${visited[$profile]}" ]]; then
+      printf '%*s%s\n' $((depth*2)) '' "${profile} (cycle detected)"
+      return 1
+    fi
+    visited[$profile]=1
+    _aws_load_profile "$profile"
+    local role="${_aws_profile_data[role_arn]}"
+    local src="${_aws_profile_data[source_profile]}"
+    local csrc="${_aws_profile_data[credential_source]}"
+    local mfa="${_aws_profile_data[mfa_serial]}"
+    local sso="${_aws_profile_data[sso_session]:-${_aws_profile_data[sso_start_url]}}"
+    indent="$(printf '%*s' $((depth*2)) '')"
+    printf "%s%s" "$indent" "$profile"
+    [[ -n "$role" ]] && printf " role=%s" "${role##*/}"
+    [[ -n "$mfa" ]] && printf " mfa=%s" "${mfa##*/}"
+    [[ -n "$sso" ]] && printf " sso=yes"
+    [[ -n "$csrc" ]] && printf " credential_source=%s" "$csrc"
+    printf "\n"
+    [[ -z "$src" ]] && return 0
+    profile="$src"
+    (( ++depth ))
+  done
+  echo "(chain truncated at depth $max_depth)" >&2
+  return 1
+}
+
 # Print the resolved AWS identity (account, user/role ARN) for the current
 # environment. Thin wrapper over `aws sts get-caller-identity` with a stable,
 # one-line output suitable for shell scripting.
@@ -336,17 +374,25 @@ function acp() {
       aws_command+=(--external-id "$external_id")
     fi
 
-    # Get source profile to use to assume role; fall back to the role profile
-    # itself so the AWS CLI can resolve credentials from credential_process,
-    # instance metadata, etc.
+    # Pick the credentials source. credential_source (Environment /
+    # Ec2InstanceMetadata / EcsContainer) is mutually exclusive with
+    # source_profile per AWS docs; when set we pass the role profile itself
+    # to --profile and let the CLI resolve the source. source_profile chains
+    # are handled transparently by the AWS CLI walking ~/.aws/config.
     local source_profile="${_aws_profile_data[source_profile]}"
-    local credentials_profile="${source_profile:-$profile}"
+    local credential_source="${_aws_profile_data[credential_source]}"
+    local credentials_profile
+    if [[ -n "$credential_source" ]]; then
+      credentials_profile="$profile"
+      echo "Assuming role $role_arn using credential_source=$credential_source"
+    else
+      credentials_profile="${source_profile:-$profile}"
+      echo "Assuming role $role_arn using profile $credentials_profile"
+    fi
     if [[ -z "$sess_name" ]]; then
       sess_name="$credentials_profile"
     fi
     aws_command+=(--profile="$credentials_profile" --role-session-name "${sess_name}")
-
-    echo "Assuming role $role_arn using profile $credentials_profile"
   else
     # Means we only need to do MFA
     aws_command=(aws sts get-session-token --profile="$profile" "${mfa_opt[@]}")
