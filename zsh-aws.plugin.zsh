@@ -71,18 +71,29 @@ function acp() {
     local -a mfa_opt
     local mfa_token
     echo -n "Please enter your MFA token for $mfa_serial: "
-    read -r mfa_token
+    read -rs mfa_token
+    echo
+    if [[ ! "$mfa_token" =~ ^[0-9]{6}$ ]]; then
+      echo "${fg[red]}Invalid MFA token: expected 6 digits${reset_color}" >&2
+      return 1
+    fi
     if [[ -z "$sess_duration" ]]; then
       echo -n "Please enter the session duration in seconds (900-43200; default: 3600, which is the default maximum for a role): "
       read -r sess_duration
     fi
-    mfa_opt=(--serial-number "$mfa_serial" --token-code "$mfa_token" --duration-seconds "${sess_duration:-3600}")
+    sess_duration="${sess_duration:-3600}"
+    if [[ ! "$sess_duration" =~ ^[0-9]+$ ]] || (( sess_duration < 900 || sess_duration > 43200 )); then
+      echo "${fg[red]}Invalid session duration: must be an integer in 900..43200${reset_color}" >&2
+      return 1
+    fi
+    mfa_opt=(--serial-number "$mfa_serial" --token-code "$mfa_token" --duration-seconds "$sess_duration")
   fi
 
   # Now see whether we need to just MFA for the current role, or assume a different one
   local role_arn="$(aws configure get role_arn --profile $profile)"
   local sess_name="$(aws configure get role_session_name --profile $profile)"
 
+  local -a aws_command
   if [[ -n "$role_arn" ]]; then
     # Means we need to assume a specified role
     aws_command=(aws sts assume-role --role-arn "$role_arn" "${mfa_opt[@]}")
@@ -93,14 +104,17 @@ function acp() {
       aws_command+=(--external-id "$external_id")
     fi
 
-    # Get source profile to use to assume role
+    # Get source profile to use to assume role; fall back to the role profile
+    # itself so the AWS CLI can resolve credentials from credential_process,
+    # instance metadata, etc.
     local source_profile="$(aws configure get source_profile --profile $profile)"
+    local credentials_profile="${source_profile:-$profile}"
     if [[ -z "$sess_name" ]]; then
-      sess_name="${source_profile:-profile}"
+      sess_name="$credentials_profile"
     fi
-    aws_command+=(--profile="${source_profile:-profile}" --role-session-name "${sess_name}")
+    aws_command+=(--profile="$credentials_profile" --role-session-name "${sess_name}")
 
-    echo "Assuming role $role_arn using profile ${source_profile:-profile}"
+    echo "Assuming role $role_arn using profile $credentials_profile"
   else
     # Means we only need to do MFA
     aws_command=(aws sts get-session-token --profile="$profile" "${mfa_opt[@]}")
@@ -186,7 +200,8 @@ else
     else
       # ok, it is not in the default prefix
       # this call to brew is expensive (about 400 ms), so at least let's make it only once
-      _brew_prefix=$(brew --prefix awscli)
+      _brew_prefix=$(brew --prefix awscli 2>/dev/null) || return 1
+      [[ -n "$_brew_prefix" ]] || return 1
     fi
   }
 
