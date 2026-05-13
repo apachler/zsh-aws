@@ -243,3 +243,8 @@ zsh test/run-tests.zsh
 
 The suite uses a temporary `AWS_CONFIG_FILE` / `AWS_SHARED_CREDENTIALS_FILE`,
 exercises the plugin's public surface, and does not call the real AWS CLI.
+
+
+## License
+
+[MIT](LICENSE) © 2021 Andreas Pachler.

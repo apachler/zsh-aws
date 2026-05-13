@@ -1,0 +1,22 @@
+name: codespell
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  codespell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: codespell-project/actions-codespell@v2
+        with:
+          # AKIA prefixes look like words; allow them. "sts" too.
+          ignore_words_list: AKIA,sts,fo,nd
+          check_filenames: true
+          check_hidden: true
+          skip: ./.git,./LICENSE
