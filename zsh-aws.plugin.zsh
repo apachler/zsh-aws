@@ -266,10 +266,39 @@ function acak() {
   AWS_PAGER="" aws iam list-access-keys
 }
 
+# Modern completion: _describe shows profile names with their region/role as a
+# description column when available. compctl is kept as a fallback for the rare
+# case where the new-style completion system isn't initialized.
+function _zsh_aws_profile_complete() {
+  local -a profiles descriptions
+  local p region role desc
+  profiles=("${(@f)$(alp 2>/dev/null)}")
+  for p in "${profiles[@]}"; do
+    [[ -z "$p" ]] && continue
+    _aws_load_profile "$p"
+    region="${_aws_profile_data[region]}"
+    role="${_aws_profile_data[role_arn]}"
+    desc=""
+    [[ -n "$region" ]] && desc="$region"
+    [[ -n "$role" ]] && desc="${desc:+$desc }→ ${role##*/}"
+    if [[ -n "$desc" ]]; then
+      descriptions+=("$p:$desc")
+    else
+      descriptions+=("$p")
+    fi
+  done
+  _describe -t aws-profiles 'AWS profile' descriptions
+}
+
 function _aws_profiles() {
   reply=($(alp))
 }
-compctl -K _aws_profiles asp acp acak
+
+if (( $+functions[compdef] )); then
+  compdef _zsh_aws_profile_complete asp acp acak
+else
+  compctl -K _aws_profiles asp acp acak
+fi
 
 # AWS prompt
 function aws_prompt_info() {
