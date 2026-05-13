@@ -203,6 +203,35 @@ function acp() {
   local aws_secret_access_key="${_aws_profile_data[aws_secret_access_key]}"
   local aws_session_token="${_aws_profile_data[aws_session_token]}"
 
+  # SSO short-circuit: if the profile is an SSO profile, run `aws sso login`
+  # (which handles the browser dance + caches a bearer token under
+  # ~/.aws/sso/cache/) and then materialize the resulting credentials via
+  # `aws configure export-credentials` so tools that don't speak SSO still
+  # work. Falls back to setting only AWS_PROFILE when export-credentials
+  # isn't available (CLI < 2.13).
+  local sso_session="${_aws_profile_data[sso_session]}"
+  local sso_start_url="${_aws_profile_data[sso_start_url]}"
+  if [[ -n "$sso_session" || -n "$sso_start_url" ]]; then
+    echo "SSO profile detected; running 'aws sso login --profile $profile'"
+    if ! aws sso login --profile "$profile"; then
+      echo "${fg[red]}aws sso login failed${reset_color}" >&2
+      return 1
+    fi
+    local sso_creds
+    if sso_creds="$(aws configure export-credentials --profile "$profile" --format env-no-export 2>/dev/null)"; then
+      # export-credentials prints lines like AWS_ACCESS_KEY_ID=...; eval is
+      # safe here because the source is the AWS CLI we just invoked.
+      eval "$sso_creds"
+      export AWS_DEFAULT_PROFILE="$profile" AWS_PROFILE="$profile" AWS_EB_PROFILE="$profile"
+      echo "Switched to AWS Profile: $profile (SSO)"
+    else
+      export AWS_DEFAULT_PROFILE="$profile" AWS_PROFILE="$profile" AWS_EB_PROFILE="$profile"
+      unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+      echo "Switched to AWS Profile: $profile (SSO; SDK will resolve creds from cache)"
+    fi
+    return 0
+  fi
+
   # First, if the profile has MFA configured, lets get the token and session duration
   local mfa_serial="${_aws_profile_data[mfa_serial]}"
   local sess_duration="${_aws_profile_data[duration_seconds]}"
