@@ -57,7 +57,8 @@ zplug "apachler/zsh-aws"
     don't read the SSO cache.
   - `credential_source = Environment | Ec2InstanceMetadata | EcsContainer`.
   - `mfa_command = <shell command>` to fetch the MFA token non-interactively
-    (e.g. `pass otp aws/prod`, `ykman oath code -s aws-dev`).
+    (e.g. `pass otp aws/prod`, `ykman oath code -s aws-dev`). When absent,
+    `acp` prompts for the token with `read -rs` (no echo).
 
   Exports `AWS_CREDENTIAL_EXPIRATION` so the prompt can show remaining TTL.
   Run `acp` with no argument to clear all credential and profile vars.
