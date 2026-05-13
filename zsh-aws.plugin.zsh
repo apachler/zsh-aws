@@ -115,6 +115,48 @@ function agp() {
   echo $AWS_PROFILE
 }
 
+# Static list of AWS commercial + GovCloud + China regions. The plugin doesn't
+# call out to EC2 to enumerate regions because that would (a) require valid
+# credentials and (b) be too slow for tab-completion.
+typeset -gra _AWS_REGIONS=(
+  us-east-1 us-east-2 us-west-1 us-west-2
+  af-south-1
+  ap-east-1 ap-south-1 ap-south-2
+  ap-northeast-1 ap-northeast-2 ap-northeast-3
+  ap-southeast-1 ap-southeast-2 ap-southeast-3 ap-southeast-4 ap-southeast-5
+  ca-central-1 ca-west-1
+  eu-central-1 eu-central-2
+  eu-north-1 eu-south-1 eu-south-2
+  eu-west-1 eu-west-2 eu-west-3
+  il-central-1
+  me-central-1 me-south-1
+  sa-east-1
+  us-gov-east-1 us-gov-west-1
+  cn-north-1 cn-northwest-1
+)
+
+# AWS region selection
+function asr() {
+  if [[ -z "$1" ]]; then
+    unset AWS_REGION AWS_DEFAULT_REGION
+    echo AWS region cleared.
+    return
+  fi
+
+  if [[ -z "${_AWS_REGIONS[(r)$1]}" ]]; then
+    echo "${fg[red]}Region '$1' is not a known AWS region.${reset_color}" >&2
+    echo "Known regions: ${(j:, :)_AWS_REGIONS}" >&2
+    return 1
+  fi
+
+  export AWS_REGION="$1"
+  export AWS_DEFAULT_REGION="$1"
+}
+
+function agr() {
+  echo "${AWS_REGION:-$AWS_DEFAULT_REGION}"
+}
+
 # AWS profile selection
 function asp() {
   if [[ -z "$1" ]]; then
@@ -294,16 +336,28 @@ function _aws_profiles() {
   reply=($(alp))
 }
 
+function _zsh_aws_region_complete() {
+  _describe -t aws-regions 'AWS region' _AWS_REGIONS
+}
+
 if (( $+functions[compdef] )); then
   compdef _zsh_aws_profile_complete asp acp acak
+  compdef _zsh_aws_region_complete asr
 else
   compctl -K _aws_profiles asp acp acak
+  function _aws_regions() { reply=("${_AWS_REGIONS[@]}") }
+  compctl -K _aws_regions asr
 fi
 
 # AWS prompt
 function aws_prompt_info() {
   [[ -z $AWS_PROFILE ]] && return
-  echo "${ZSH_THEME_AWS_PREFIX:=<aws:}${AWS_PROFILE}${ZSH_THEME_AWS_SUFFIX:=>}"
+  local region="${AWS_REGION:-$AWS_DEFAULT_REGION}"
+  local region_segment=""
+  if [[ -n "$region" && "$SHOW_AWS_REGION_IN_PROMPT" != false ]]; then
+    region_segment="${ZSH_THEME_AWS_REGION_PREFIX:=@}${region}${ZSH_THEME_AWS_REGION_SUFFIX:=}"
+  fi
+  echo "${ZSH_THEME_AWS_PREFIX:=<aws:}${AWS_PROFILE}${region_segment}${ZSH_THEME_AWS_SUFFIX:=>}"
 }
 
 if [[ "$SHOW_AWS_PROMPT" != false && "$RPROMPT" != *'$(aws_prompt_info)'* ]]; then
