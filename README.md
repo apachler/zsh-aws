@@ -1,5 +1,10 @@
 # ZSH AWS plugin
 
+[![CI](https://github.com/apachler/zsh-aws/actions/workflows/ci.yml/badge.svg)](https://github.com/apachler/zsh-aws/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/apachler/zsh-aws?sort=semver)](https://github.com/apachler/zsh-aws/releases/latest)
+[![License](https://img.shields.io/github/license/apachler/zsh-aws)](LICENSE)
+[![zsh](https://img.shields.io/badge/zsh-5.8%2B-1A1A1A?logo=gnu-bash&logoColor=white)](https://www.zsh.org/)
+
 This plugin is based on the original [aws plugin](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/aws) of Oh-My-ZSH!
 
 It provides completion support for [awscli](https://docs.aws.amazon.com/cli/latest/reference/index.html)
