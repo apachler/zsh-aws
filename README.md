@@ -15,12 +15,75 @@ autoload -Uz compinit && compinit
 autoload -Uz bashcompinit && bashcompinit
 ```
 
-Now the plugin can be loaded
- 
+Now the plugin can be loaded with any of the following methods.
+
+### Oh My Zsh
+
+Clone into the custom plugins directory and add to the `plugins=(...)` line in
+`~/.zshrc`:
+
+```zsh
+git clone https://github.com/apachler/zsh-aws.git \
+  "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-aws"
+```
+
+```zsh
+plugins=(... zsh-aws)
+```
+
 ### zplug
 
 ```zsh
 zplug "apachler/zsh-aws"
+```
+
+### Antigen
+
+```zsh
+antigen bundle apachler/zsh-aws
+```
+
+### Antidote
+
+Add to your `~/.zsh_plugins.txt`:
+
+```
+apachler/zsh-aws
+```
+
+### zinit
+
+```zsh
+zinit light apachler/zsh-aws
+```
+
+For deferred loading (faster startup; load on first `aws`/`asp`/`acp` call):
+
+```zsh
+zinit ice wait lucid
+zinit light apachler/zsh-aws
+```
+
+### sheldon
+
+Add to your `~/.config/sheldon/plugins.toml`:
+
+```toml
+[plugins.zsh-aws]
+github = "apachler/zsh-aws"
+```
+
+### znap
+
+```zsh
+znap source apachler/zsh-aws
+```
+
+### Manual
+
+```zsh
+git clone https://github.com/apachler/zsh-aws.git ~/.zsh-aws
+echo 'source ~/.zsh-aws/zsh-aws.plugin.zsh' >> ~/.zshrc
 ```
 
 
