@@ -288,42 +288,62 @@ fi
 if command -v aws_completer &> /dev/null; then
   complete -C aws_completer aws
 else
-  function _awscli-homebrew-installed() {
-    # check if Homebrew is installed
-    (( $+commands[brew] )) || return 1
+  # Persist the resolved completer path so we don't repeat the (~400 ms)
+  # `brew --prefix awscli` call on every new shell. Cache is invalidated when
+  # the cached path no longer exists (e.g. CLI was upgraded or uninstalled).
+  _aws_completer_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh-aws"
+  _aws_completer_cache_file="$_aws_completer_cache_dir/completer-path"
 
-    # speculatively check default brew prefix
-    if [ -h /usr/local/opt/awscli ]; then
-      _brew_prefix=/usr/local/opt/awscli
-    else
-      # ok, it is not in the default prefix
-      # this call to brew is expensive (about 400 ms), so at least let's make it only once
-      _brew_prefix=$(brew --prefix awscli 2>/dev/null) || return 1
-      [[ -n "$_brew_prefix" ]] || return 1
+  _aws_zsh_completer_path=""
+  if [[ -r "$_aws_completer_cache_file" ]]; then
+    _aws_zsh_completer_path="$(< "$_aws_completer_cache_file")"
+    [[ -r "$_aws_zsh_completer_path" ]] || _aws_zsh_completer_path=""
+  fi
+
+  if [[ -z "$_aws_zsh_completer_path" ]]; then
+    function _awscli-homebrew-installed() {
+      # check if Homebrew is installed
+      (( $+commands[brew] )) || return 1
+
+      # speculatively check default brew prefix
+      if [ -h /usr/local/opt/awscli ]; then
+        _brew_prefix=/usr/local/opt/awscli
+      else
+        # ok, it is not in the default prefix
+        # this call to brew is expensive (about 400 ms), so at least let's make it only once
+        _brew_prefix=$(brew --prefix awscli 2>/dev/null) || return 1
+        [[ -n "$_brew_prefix" ]] || return 1
+      fi
+    }
+
+    # get aws_zsh_completer.sh location from $PATH
+    _aws_zsh_completer_path="$commands[aws_zsh_completer.sh]"
+
+    # otherwise check common locations
+    if [[ -z $_aws_zsh_completer_path ]]; then
+      # Homebrew
+      if _awscli-homebrew-installed; then
+        _aws_zsh_completer_path=$_brew_prefix/libexec/bin/aws_zsh_completer.sh
+      # Ubuntu
+      elif [[ -e /usr/share/zsh/vendor-completions/_awscli ]]; then
+        _aws_zsh_completer_path=/usr/share/zsh/vendor-completions/_awscli
+      # NixOS
+      elif [[ -e "${commands[aws]:P:h:h}/share/zsh/site-functions/aws_zsh_completer.sh" ]]; then
+        _aws_zsh_completer_path="${commands[aws]:P:h:h}/share/zsh/site-functions/aws_zsh_completer.sh"
+      # RPM
+      else
+        _aws_zsh_completer_path=/usr/share/zsh/site-functions/aws_zsh_completer.sh
+      fi
     fi
-  }
 
-  # get aws_zsh_completer.sh location from $PATH
-  _aws_zsh_completer_path="$commands[aws_zsh_completer.sh]"
-
-  # otherwise check common locations
-  if [[ -z $_aws_zsh_completer_path ]]; then
-    # Homebrew
-    if _awscli-homebrew-installed; then
-      _aws_zsh_completer_path=$_brew_prefix/libexec/bin/aws_zsh_completer.sh
-    # Ubuntu
-    elif [[ -e /usr/share/zsh/vendor-completions/_awscli ]]; then
-      _aws_zsh_completer_path=/usr/share/zsh/vendor-completions/_awscli
-    # NixOS
-    elif [[ -e "${commands[aws]:P:h:h}/share/zsh/site-functions/aws_zsh_completer.sh" ]]; then
-      _aws_zsh_completer_path="${commands[aws]:P:h:h}/share/zsh/site-functions/aws_zsh_completer.sh"
-    # RPM
-    else
-      _aws_zsh_completer_path=/usr/share/zsh/site-functions/aws_zsh_completer.sh
+    if [[ -r "$_aws_zsh_completer_path" ]]; then
+      [[ -d "$_aws_completer_cache_dir" ]] || mkdir -p "$_aws_completer_cache_dir" 2>/dev/null
+      print -r -- "$_aws_zsh_completer_path" > "$_aws_completer_cache_file" 2>/dev/null
     fi
+    unfunction _awscli-homebrew-installed 2>/dev/null
   fi
 
   [[ -r $_aws_zsh_completer_path ]] && source $_aws_zsh_completer_path
-  unset _aws_zsh_completer_path _brew_prefix
+  unset _aws_zsh_completer_path _brew_prefix _aws_completer_cache_dir _aws_completer_cache_file
 fi
 
