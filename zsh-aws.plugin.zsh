@@ -8,6 +8,9 @@ if [[ $PMSPEC != *b* ]] {
   PATH=$PATH:"${0:h}/bin"
 }
 
+# $EPOCHSECONDS is used by aws_prompt_info for cheap TTL math without forking.
+zmodload zsh/datetime 2>/dev/null
+
 
 function alp() {
   local verbose=0 arg
@@ -161,6 +164,7 @@ function agr() {
 function asp() {
   if [[ -z "$1" ]]; then
     unset AWS_DEFAULT_PROFILE AWS_PROFILE AWS_EB_PROFILE
+    unset AWS_CREDENTIAL_EXPIRATION _AWS_CREDENTIAL_EXPIRATION_EPOCH
     echo AWS profile cleared.
     return
   fi
@@ -178,11 +182,29 @@ function asp() {
   export AWS_EB_PROFILE=$1
 }
 
+# Convert an ISO-8601 timestamp (as returned by sts and export-credentials)
+# to seconds since the epoch. Tries GNU date first, then BSD/macOS date.
+function _aws_iso_to_epoch() {
+  local iso="$1" ts
+  if ts="$(date -d "$iso" +%s 2>/dev/null)"; then
+    print -r -- "$ts"
+    return 0
+  fi
+  local stripped="${iso%Z}"
+  stripped="${stripped%+*}"
+  if ts="$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)"; then
+    print -r -- "$ts"
+    return 0
+  fi
+  return 1
+}
+
 # AWS profile switch
 function acp() {
   if [[ -z "$1" ]]; then
     unset AWS_DEFAULT_PROFILE AWS_PROFILE AWS_EB_PROFILE
     unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+    unset AWS_CREDENTIAL_EXPIRATION _AWS_CREDENTIAL_EXPIRATION_EPOCH
     echo AWS profile cleared.
     return
   fi
@@ -220,13 +242,21 @@ function acp() {
     local sso_creds
     if sso_creds="$(aws configure export-credentials --profile "$profile" --format env-no-export 2>/dev/null)"; then
       # export-credentials prints lines like AWS_ACCESS_KEY_ID=...; eval is
-      # safe here because the source is the AWS CLI we just invoked.
+      # safe here because the source is the AWS CLI we just invoked. It also
+      # sets AWS_CREDENTIAL_EXPIRATION which we mirror to an epoch sidecar.
       eval "$sso_creds"
       export AWS_DEFAULT_PROFILE="$profile" AWS_PROFILE="$profile" AWS_EB_PROFILE="$profile"
+      if [[ -n "$AWS_CREDENTIAL_EXPIRATION" ]]; then
+        local epoch
+        if epoch="$(_aws_iso_to_epoch "$AWS_CREDENTIAL_EXPIRATION")"; then
+          export _AWS_CREDENTIAL_EXPIRATION_EPOCH="$epoch"
+        fi
+      fi
       echo "Switched to AWS Profile: $profile (SSO)"
     else
       export AWS_DEFAULT_PROFILE="$profile" AWS_PROFILE="$profile" AWS_EB_PROFILE="$profile"
       unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+      unset AWS_CREDENTIAL_EXPIRATION _AWS_CREDENTIAL_EXPIRATION_EPOCH
       echo "Switched to AWS Profile: $profile (SSO; SDK will resolve creds from cache)"
     fi
     return 0
@@ -291,16 +321,18 @@ function acp() {
   fi
 
   # Format output of aws command for easier processing
-  aws_command+=(--query '[Credentials.AccessKeyId,Credentials.SecretAccessKey,Credentials.SessionToken]' --output text)
+  aws_command+=(--query '[Credentials.AccessKeyId,Credentials.SecretAccessKey,Credentials.SessionToken,Credentials.Expiration]' --output text)
 
   # Run the aws command to obtain credentials
   local -a credentials
   credentials=(${(ps:\t:)"$(${aws_command[@]})"})
 
+  local credential_expiration=""
   if [[ -n "$credentials" ]]; then
     aws_access_key_id="${credentials[1]}"
     aws_secret_access_key="${credentials[2]}"
     aws_session_token="${credentials[3]}"
+    credential_expiration="${credentials[4]}"
   fi
 
   # Switch to AWS profile
@@ -315,6 +347,18 @@ function acp() {
       export AWS_SESSION_TOKEN="$aws_session_token"
     else
       unset AWS_SESSION_TOKEN
+    fi
+
+    if [[ -n "$credential_expiration" && "$credential_expiration" != "None" ]]; then
+      export AWS_CREDENTIAL_EXPIRATION="$credential_expiration"
+      local epoch
+      if epoch="$(_aws_iso_to_epoch "$credential_expiration")"; then
+        export _AWS_CREDENTIAL_EXPIRATION_EPOCH="$epoch"
+      else
+        unset _AWS_CREDENTIAL_EXPIRATION_EPOCH
+      fi
+    else
+      unset AWS_CREDENTIAL_EXPIRATION _AWS_CREDENTIAL_EXPIRATION_EPOCH
     fi
 
     echo "Switched to AWS Profile: $profile"
@@ -386,7 +430,19 @@ function aws_prompt_info() {
   if [[ -n "$region" && "$SHOW_AWS_REGION_IN_PROMPT" != false ]]; then
     region_segment="${ZSH_THEME_AWS_REGION_PREFIX:=@}${region}${ZSH_THEME_AWS_REGION_SUFFIX:=}"
   fi
-  echo "${ZSH_THEME_AWS_PREFIX:=<aws:}${AWS_PROFILE}${region_segment}${ZSH_THEME_AWS_SUFFIX:=>}"
+  local ttl_segment=""
+  if [[ -n "$_AWS_CREDENTIAL_EXPIRATION_EPOCH" && "$SHOW_AWS_EXPIRY_IN_PROMPT" != false ]]; then
+    local remaining=$(( _AWS_CREDENTIAL_EXPIRATION_EPOCH - EPOCHSECONDS ))
+    local warn_secs="${ZSH_THEME_AWS_EXPIRY_WARN_SECS:-300}"
+    if (( remaining <= 0 )); then
+      ttl_segment=" ${ZSH_THEME_AWS_EXPIRY_WARN_COLOR:-${fg[red]}}EXPIRED${reset_color}"
+    elif (( remaining < warn_secs )); then
+      ttl_segment=" ${ZSH_THEME_AWS_EXPIRY_WARN_COLOR:-${fg[red]}}$((remaining / 60))m${reset_color}"
+    else
+      ttl_segment=" $((remaining / 60))m"
+    fi
+  fi
+  echo "${ZSH_THEME_AWS_PREFIX:=<aws:}${AWS_PROFILE}${region_segment}${ttl_segment}${ZSH_THEME_AWS_SUFFIX:=>}"
 }
 
 if [[ "$SHOW_AWS_PROMPT" != false && "$RPROMPT" != *'$(aws_prompt_info)'* ]]; then
