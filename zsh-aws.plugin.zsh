@@ -10,8 +10,71 @@ if [[ $PMSPEC != *b* ]] {
 
 
 function alp() {
-  [[ -r "${AWS_CONFIG_FILE:-$HOME/.aws/config}" ]] || return 1
-  grep --color=never -Eo '\[.*\]' "${AWS_CONFIG_FILE:-$HOME/.aws/config}" | sed -E 's/^[[:space:]]*\[(profile)?[[:space:]]*([-_[:alnum:]\.@]+)\][[:space:]]*$/\2/g'
+  local verbose=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      -v|--long|--verbose) verbose=1 ;;
+      -h|--help)
+        echo "usage: alp [-v|--long]   # list AWS profiles (verbose adds region and role_arn)"
+        return 0
+        ;;
+      *) echo "alp: unknown argument: $arg" >&2; return 2 ;;
+    esac
+  done
+
+  local config="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+  local creds="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+
+  # Cheap cache invalidation key: file paths + mtimes. Re-stat is cheaper than
+  # re-parsing a config with dozens of profiles on every tab press.
+  zmodload -F zsh/stat b:zstat 2>/dev/null
+  local -a stat_result
+  local config_mtime=0 creds_mtime=0
+  [[ -r "$config" ]] && zstat -A stat_result +mtime "$config" 2>/dev/null && config_mtime="$stat_result[1]"
+  [[ -r "$creds" ]] && zstat -A stat_result +mtime "$creds" 2>/dev/null && creds_mtime="$stat_result[1]"
+  local cache_key="$config:$config_mtime:$creds:$creds_mtime"
+
+  typeset -gA _aws_alp_cache
+  if (( ! verbose )) && [[ "${_aws_alp_cache[key]}" == "$cache_key" && -n "${_aws_alp_cache[list]}" ]]; then
+    print -r -- "${_aws_alp_cache[list]}"
+    return 0
+  fi
+
+  local file line section
+  local -A seen
+  local -a profiles
+  for file in "$config" "$creds"; do
+    [[ -r "$file" ]] || continue
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"
+      if [[ $line =~ '^[[:space:]]*\[[[:space:]]*(profile[[:space:]]+)?([-_[:alnum:].@]+)[[:space:]]*\][[:space:]]*$' ]]; then
+        section="$match[2]"
+        if [[ -z "${seen[$section]}" ]]; then
+          seen[$section]=1
+          profiles+=("$section")
+        fi
+      fi
+    done < "$file"
+  done
+
+  (( ${#profiles} )) || return 1
+
+  if (( verbose )); then
+    local p region role
+    printf "%-32s %-16s %s\n" "PROFILE" "REGION" "ROLE_ARN"
+    for p in "${profiles[@]}"; do
+      _aws_load_profile "$p"
+      region="${_aws_profile_data[region]:--}"
+      role="${_aws_profile_data[role_arn]:--}"
+      printf "%-32s %-16s %s\n" "$p" "$region" "$role"
+    done
+    return 0
+  fi
+
+  local list="${(F)profiles}"
+  _aws_alp_cache[key]="$cache_key"
+  _aws_alp_cache[list]="$list"
+  print -r -- "$list"
 }
 
 # Load all keys for $1 from $AWS_CONFIG_FILE and the credentials file into the
