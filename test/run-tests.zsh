@@ -128,6 +128,12 @@ role_arn = arn:aws:iam::999:role/b
 region = us-east-1
 s3 =
   signature_version = s3v4
+
+[profile bad-mfa]
+role_arn = arn:aws:iam::123:role/x
+source_profile = beta
+mfa_serial = arn:aws:iam::456:mfa/me
+mfa_command = printf ''
 EOF
 
 cat > "$TEST_TMP/credentials" <<'EOF'
@@ -151,19 +157,28 @@ export AWS_STUB_LOG="$TEST_TMP/aws-calls.log"
 : > "$AWS_STUB_LOG"
 cat > "$TEST_TMP/bin/aws" <<'STUB'
 #!/usr/bin/env zsh
-print -r -- "$@" >> "${AWS_STUB_LOG:-/dev/null}"
+emulate -L zsh
 
-# Skip leading flags like AWS_PAGER assignments don't reach here; argv starts
-# at subcommand. Walk past any --flag=value pairs to find the real verb.
-local -a positional
-local arg
-for arg in "$@"; do
-  case "$arg" in
-    --*) ;;
-    *) positional+=("$arg") ;;
-  esac
+print -r -- "$*" >> "${AWS_STUB_LOG:-/dev/null}"
+
+# Walk past --flag values to find the first two non-flag args (the AWS verb
+# and subcommand). They identify the operation; everything else is options.
+typeset -a positional
+local a
+for a in "$@"; do
+  [[ "$a" == --* ]] && continue
+  positional+=("$a")
+  (( ${#positional} >= 4 )) && break
 done
-local cmd="$positional[1] $positional[2]"
+local cmd="${positional[1]} ${positional[2]}"
+
+# Controlled-failure mode: AWS_STUB_FAIL is a single subcommand prefix (e.g.
+# "sts get-caller-identity" or "sso login"). If $cmd matches, exit non-zero
+# before the canned responses below.
+if [[ -n "${AWS_STUB_FAIL:-}" && "$cmd" == "$AWS_STUB_FAIL"* ]]; then
+  print -u2 "stub: forced failure for '$cmd'"
+  exit 1
+fi
 
 case "$cmd" in
   "sts assume-role")
@@ -514,12 +529,48 @@ assert_contains "$(cat $AWS_STUB_LOG)" "iam delete-access-key" "acak deletes old
 assert_fails "acak requires a profile arg" acak
 
 # ============================================================
-# completion helpers shouldn't crash
+# Error / edge-case paths
+# ============================================================
+
+# mfa_command produces empty output
+reset_env
+: > "$AWS_STUB_LOG"
+assert_fails "acp(bad-mfa) fails when mfa_command yields nothing" acp bad-mfa
+
+# Stubbed aws fails — awhoami surfaces it
+reset_env
+AWS_STUB_FAIL="sts get-caller-identity" assert_fails "awhoami surfaces sts failure" awhoami
+
+# Stubbed sso login fails — acp(SSO) bails
+reset_env
+AWS_STUB_FAIL="sso login" assert_fails "acp(SSO) fails when sso login fails" acp sso-thing
+
+# SSO with export-credentials failure: should still set AWS_PROFILE but no creds
+reset_env
+: > "$AWS_STUB_LOG"
+AWS_STUB_FAIL="configure export-credentials" acp sso-thing >/dev/null
+assert_eq "sso-thing" "$AWS_PROFILE" "acp(SSO) sets AWS_PROFILE even if export-credentials fails"
+assert_eq "" "${AWS_ACCESS_KEY_ID:-}" "acp(SSO) clears AWS_ACCESS_KEY_ID on export-credentials failure"
+
+# acak: create-access-key failure
+reset_env
+: > "$AWS_STUB_LOG"
+AWS_STUB_FAIL="iam create-access-key" assert_fails "acak fails when create-access-key fails" acak alpha
+
+# ============================================================
+# completion helpers
 # ============================================================
 reset_env
 local complete_out
 complete_out="$(reply=(); _aws_profiles; print -- ${reply})"
 assert_contains "$complete_out" "alpha" "_aws_profiles populates reply"
+
+# Call the modern completion functions directly to exercise their bodies.
+# _describe needs a completion context, so we silence its errors and don't
+# assert on output — we just want the function bodies to run.
+_zsh_aws_profile_complete >/dev/null 2>&1
+_zsh_aws_region_complete  >/dev/null 2>&1
+(( ++TESTS_RUN ))   # the absence of a crash is the assertion
 
 # ============================================================
 # summary

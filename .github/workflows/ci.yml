@@ -31,6 +31,10 @@ jobs:
       - name: Run test suite
         run: zsh test/run-tests.zsh
 
+      - name: Line coverage (>= 80%)
+        if: runner.os == 'Linux'
+        run: zsh test/coverage.zsh
+
   # Run against pinned zsh versions to catch version-specific regressions.
   # Each container ships a known zsh from its distro packages — no need to
   # build from source. Add a row when a real bug surfaces on an older version.

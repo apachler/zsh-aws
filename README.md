@@ -4,6 +4,8 @@
 [![Latest release](https://img.shields.io/github/v/release/apachler/zsh-aws?sort=semver)](https://github.com/apachler/zsh-aws/releases/latest)
 [![License](https://img.shields.io/github/license/apachler/zsh-aws)](LICENSE)
 [![zsh](https://img.shields.io/badge/zsh-5.8%2B-1A1A1A?logo=gnu-bash&logoColor=white)](https://www.zsh.org/)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-brightgreen)](test/coverage.zsh)
+[![Tests](https://img.shields.io/badge/tests-100-brightgreen)](test/run-tests.zsh)
 
 This plugin is based on the original [aws plugin](https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/aws) of Oh-My-ZSH!
 
@@ -238,11 +240,14 @@ be the 6-digit code. Anything else fails fast before the `sts` call.
 ## Running the tests
 
 ```zsh
-zsh test/run-tests.zsh
+zsh test/run-tests.zsh        # 100 assertions; no network, no real AWS CLI
+zsh test/coverage.zsh         # line coverage; fails if < 80%
+COVERAGE_VERBOSE=1 zsh test/coverage.zsh   # also lists uncovered lines
 ```
 
-The suite uses a temporary `AWS_CONFIG_FILE` / `AWS_SHARED_CREDENTIALS_FILE`,
-exercises the plugin's public surface, and does not call the real AWS CLI.
+The suite uses a temporary `AWS_CONFIG_FILE` / `AWS_SHARED_CREDENTIALS_FILE`
+plus a stub `aws` binary on `PATH` that records each call and returns canned
+responses, so nothing reaches the real cloud.
 
 
 ## License
