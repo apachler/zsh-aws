@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose a new helper, option, or behavior change.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open this **before** writing code. Small fixes can be PR'd directly; anything
+        with a design choice is much easier to discuss in an issue first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that the plugin makes hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What command, option, or behavior would solve it? If you can sketch the user-facing surface (flags, env vars, prompt output), do so.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Anything you tried already that didn't fit.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope check
+      description: |
+        The plugin's scope is intentionally narrow: profile/region management, prompt info, and AWS CLI completion. Features that overlap with `aws configure`, `aws-vault`, `granted`, or a full identity manager are usually out of scope.
+        Why is this a fit for `zsh-aws` rather than one of those tools?

@@ -7,3 +7,8 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: ci
+    groups:
+      # One PR per week for routine action bumps. Major bumps still open
+      # their own PR so they get scrutiny.
+      actions-minor-patch:
+        update-types: [minor, patch]

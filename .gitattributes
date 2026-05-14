@@ -1,0 +1,13 @@
+# Force LF for shell scripts regardless of contributor OS. zsh on Linux/macOS
+# treats CRLF line endings as syntax errors in heredocs and some quoted forms.
+* text=auto eol=lf
+
+*.zsh   text eol=lf
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+
+# Tell GitHub's language stats to ignore the vendored fallback completer.
+bin/aws_zsh_completer.sh linguist-vendored

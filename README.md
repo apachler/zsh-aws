@@ -250,6 +250,23 @@ plus a stub `aws` binary on `PATH` that records each call and returns canned
 responses, so nothing reaches the real cloud.
 
 
+## Contributing
+
+Pull requests are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
+development setup, the project conventions, and what CI expects before you
+open a PR. Contributors agree to the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+
+## Security
+
+If you find a security issue — particularly anything around credential
+handling, command injection through profile fields, or the release workflow —
+report it privately via
+[GitHub's vulnerability reporting](https://github.com/apachler/zsh-aws/security/advisories/new).
+See [`SECURITY.md`](SECURITY.md) for scope and SLA.
+
+
 ## License
 
 [MIT](LICENSE) © 2021 Andreas Pachler.

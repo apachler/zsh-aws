@@ -1,0 +1,17 @@
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Test scratch
+/tmp/
+*.log
+zcompdump*
+
+# Coverage artifacts
+/coverage/
+*.coverage

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/apachler/zsh-aws/security/advisories/new
+    about: Report security issues privately via GitHub's advisories — not as a public issue.
+  - name: Question or discussion
+    url: https://github.com/apachler/zsh-aws/discussions
+    about: For usage questions or open-ended discussion, prefer Discussions over an issue.
