@@ -16,56 +16,14 @@ Scoring legend:
 
 ## Tier 1 — high ROI, low risk
 
-### 1. Pin third-party GitHub Actions to commit SHAs
-
-- **Priority**: P1
-- **Effort**: ~30 min
-- **Rationale**: The release pipeline runs `gh release create` with
-  `contents: write`. If a third-party action we use is compromised at the tag
-  level (force-push to `v1`, registry tag move), an attacker could exfiltrate
-  `GITHUB_TOKEN` or tamper with release artifacts. Pinning to a commit SHA
-  blocks that vector. First-party `actions/*` is lower-risk but pinning them
-  is still industry-standard.
-- **What to change**:
-  - `.github/workflows/ci.yml` — `actions/checkout@v4`
-  - `.github/workflows/release.yml` — `actions/checkout@v4`
-  - `.github/workflows/codespell.yml` — `codespell-project/actions-codespell@v2`
-    (third-party — **most important**)
-  - `.github/workflows/link-check.yml` —
-    `gaurav-nelson/github-action-markdown-link-check@v1` (third-party — also
-    important)
-- **Implementation notes**: Look up each action's latest release tag,
-  resolve to its commit SHA (`gh api repos/<owner>/<repo>/git/refs/tags/<tag>`
-  or the GitHub UI's "tag → commits" link), and write
-  `uses: owner/repo@<40-char-sha> # vX.Y.Z`. Dependabot understands SHA pins
-  and will keep them updated.
-- **Expected impact**: closes a documented supply-chain attack vector;
-  bumps the OpenSSF Scorecard signal materially.
-
-### 2. Add `actionlint` to CI
-
-- **Priority**: P1
-- **Effort**: ~20 min
-- **Rationale**: We already had one bug from a workflow regression (the
-  `release` job needed a manual `workflow_dispatch` retrofit). Linting
-  workflows catches `if:` typos, bad `needs:` references, shell-injection
-  patterns in `${{ ... }}` expressions, and missing `permissions:` blocks.
-- **What to change**: a new `.github/workflows/actionlint.yml` running
-  `rhysd/actionlint` (or `reviewdog/action-actionlint`) on PRs touching
-  `.github/workflows/**`.
-- **Implementation notes**: Pin to a SHA per item #1. Run with `-color`.
-  Add to required checks in the branch protection rules.
-- **Expected impact**: cheaply prevents a class of workflow bugs that
-  otherwise only surface in prod.
-
 ### 3. OpenSSF Scorecard workflow + badge
 
 - **Priority**: P2
 - **Effort**: ~20 min
 - **Rationale**: Scorecard is the de-facto OSS-maturity baseline. For a repo
   that handles AWS credentials, having a published Scorecard score signals
-  trustworthiness to downstream users. With items 1 and 2 done, this repo
-  scores well — collect the credit.
+  trustworthiness to downstream users. With SHA-pinning and actionlint
+  already in place, this repo scores well — collect the credit.
 - **What to change**: a new `.github/workflows/scorecard.yml` (the template
   from `ossf/scorecard-action`) and an
   `https://api.securityscorecards.dev/projects/...` badge in the README.
@@ -96,8 +54,7 @@ Scoring legend:
   - require PRs (1 approval if you onboard a co-maintainer, otherwise just
     "require PR" with admin bypass off for force-pushes),
   - require status checks: `test (ubuntu-latest)`, `test (macos-latest)`,
-    `codespell`, the zsh-version matrix labels, and (once added)
-    `actionlint`,
+    `codespell`, `actionlint`, and the zsh-version matrix labels,
   - require linear history,
   - require signed commits (the existing setup already SSH-signs locally),
   - block force pushes,
@@ -181,7 +138,7 @@ Scoring legend:
   For a security-adjacent project, attaching a `cosign`-signed checksum
   (`SHA256SUMS` + `SHA256SUMS.sig`) is a low-effort hardening.
 - **Implementation notes**: needs `id-token: write` for keyless `cosign`.
-  Pin `sigstore/cosign-installer` to a SHA per item #1.
+  Pin `sigstore/cosign-installer` to a SHA (Dependabot will track bumps).
 
 ---
 
@@ -207,7 +164,7 @@ Scoring legend:
 
 - **Priority**: P4
 - **Rationale**: We have nothing meaningful for `pre-commit` to run yet
-  (no formatter, no linter beyond `zsh -n`). Skip until item #7 lands and
+  (no formatter; `zsh -n` is the only lint). Skip until item #7 lands and
   there's at least one hook worth installing.
 
 ### 16. ROADMAP.md / GOVERNANCE.md

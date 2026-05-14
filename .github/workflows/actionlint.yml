@@ -1,0 +1,38 @@
+name: actionlint
+
+# Lint .github/workflows/**.yml for syntax errors, expression-injection
+# patterns, bad `needs:` references, missing permissions blocks, and similar
+# workflow bugs that otherwise only surface in prod. Runs whenever a workflow
+# file changes; cheap enough to be required-on-PR if you turn on branch
+# protection.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: reviewdog/action-actionlint@5eaffa19a1991ecc52b11eddcdd57760d1ac7e3d # v1.72.0
+        with:
+          # `local` reporter prints to the job log only — no PR annotations,
+          # so we don't need `checks: write`. `fail_on_error` makes the job
+          # red on any finding, which is what we want for branch protection.
+          reporter: local
+          fail_on_error: true
